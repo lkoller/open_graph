@@ -28,7 +28,8 @@ defmodule OpenGraph do
   """
   def fetch(url) do
     case HTTPoison.get(url, [], ssl: [{:versions, [:"tlsv1.2"]}], follow_redirect: true) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+      {:ok, %HTTPoison.Response{status_code: 200, headers: headers, body: body}} ->
+        body = decode_response_content(headers, body)
         {:ok, OpenGraph.parse(body)}
 
       {:ok, %HTTPoison.Response{status_code: 502}} ->
@@ -73,5 +74,24 @@ defmodule OpenGraph do
 
   defp drop_og_prefix(["og:" <> property, content]) do
     [property, content]
+  end
+
+  defp decode_response_content(headers, body) do
+    gzipped =
+      Enum.any?(headers, fn kv ->
+        case kv do
+          {"Content-Encoding", "gzip"} -> true
+          _ -> false
+        end
+      end)
+
+    html_body =
+      if gzipped do
+        :zlib.gunzip(body)
+      else
+        body
+      end
+
+    html_body
   end
 end
